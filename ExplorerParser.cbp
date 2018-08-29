@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="ExplorerParser" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Debug">
+				<Option output="bin/Debug/ExplorerParser" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Debug/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Option parameters="../../" />
+				<Compiler>
+					<Add option="-g" />
+				</Compiler>
+			</Target>
+			<Target title="Release">
+				<Option output="bin/Release/ExplorerParser" prefix_auto="1" extension_auto="1" />
+				<Option object_output="obj/Release/" />
+				<Option type="1" />
+				<Option compiler="gcc" />
+				<Compiler>
+					<Add option="-O2" />
+				</Compiler>
+				<Linker>
+					<Add option="-s" />
+				</Linker>
+			</Target>
+		</Build>
+		<Compiler>
+			<Add option="-Wall" />
+			<Add option="-std=c++11" />
+			<Add option="-m64" />
+			<Add option="-fexceptions" />
+			<Add directory="../ExplorerParser" />
+		</Compiler>
+		<Linker>
+			<Add option="-m64" />
+			<Add library="cryptocpp/bin/libcryptopp.a" />
+			<Add library="gmp/.libs/libgmp.a" />
+			<Add directory="cryptocpp/bin" />
+			<Add directory="gmp/.libs" />
+		</Linker>
+		<Unit filename="base58.h" />
+		<Unit filename="hash/haval.cpp" />
+		<Unit filename="hash/keccak.cpp" />
+		<Unit filename="hash/ripemd.cpp" />
+		<Unit filename="hash/sha2.cpp" />
+		<Unit filename="hash/sha2big.cpp" />
+		<Unit filename="hash/sph_haval.h" />
+		<Unit filename="hash/sph_keccak.h" />
+		<Unit filename="hash/sph_ripemd.h" />
+		<Unit filename="hash/sph_sha2.h" />
+		<Unit filename="hash/sph_tiger.h" />
+		<Unit filename="hash/sph_types.h" />
+		<Unit filename="hash/sph_whirlpool.h" />
+		<Unit filename="hash/tiger.cpp" />
+		<Unit filename="hash/whirlpool.cpp" />
+		<Unit filename="main.cpp" />
+		<Unit filename="utils.h" />
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger />
+			<lib_finder disable_auto="1" />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>
