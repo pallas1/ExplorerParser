@@ -2,9 +2,10 @@
 
 ExplorerParser is a fast block file parser written in C++ which creates db files for [MiniExplorer](https://github.com/MiniblockchainProject/MiniExplorer/). It was created in Code::Blocks and has been tested to compile with mingw64 on Windows, the project file is included.
 
-The first time you run the parser the first argument should be -firstrun and the second argument should be your coin data directory, it may need to be encapsulated in quotes on Windows.
+The binary should be placed in the root directory of the explorer. The first time you run the parser the first argument should be -firstrun and the second argument should be your coin data directory.
 
-Command line example: 
+The 2nd argument may need to be encapsulated in quotes on Windows. Command line example:
+
 ExplorerParser -firstrun "C:\Users\MyName\AppData\Roaming\Cryptonite\blocks"
 
 On an average machine it should take around 30 minutes to finish computing and saving the explorer db files the first time you run it. To update the db files any time after that use the -update argument.
