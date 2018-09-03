@@ -34,7 +34,7 @@ inline bool DirExists(const std::string dirname)
 
 inline bool CreateDir(const std::string dirname)
 {
-    return (mkdir(dirname.c_str()) == 0) ? true : false;
+    return (mkdir(dirname.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0) ? true : false;
 }
 
 inline bool FileExists(const std::string& filename)
