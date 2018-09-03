@@ -392,10 +392,10 @@ std::string read_block_files(std::string block_folder)
 
         std::string file_name = block_folder+"/blk"+int_str+".dat";
         FILE* pFile = fopen(file_name.c_str(), "rb");
-        fseek(pFile, bfile_index, SEEK_SET);
 
         if (pFile != NULL) {
 
+            fseek(pFile, bfile_index, SEEK_SET);
             std::cout << "Reading " << file_name << std::endl;
 
             while (true)
