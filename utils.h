@@ -16,7 +16,7 @@
     #include <direct.h>
     #define access   _access_s
     #define stat64   _stat64
-    #define mkdir    _mkdir
+    #define mkdir(A, B) _mkdir(A)
 #else
     #include <unistd.h>
 #endif
