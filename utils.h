@@ -704,6 +704,8 @@ class BlockData
 public:
     bool isOrphan;
     char* bytes;
+    uint32_t fileNumber;
+    uint64_t fileIndex;
     uint32_t txnCount;
     uint32_t inpCount;
     uint32_t outCount;
@@ -714,6 +716,8 @@ public:
     BlockData() :
         isOrphan(true),
         bytes(nullptr),
+        fileNumber(0),
+        fileIndex(0),
         txnCount(0),
         inpCount(0),
         outCount(0),

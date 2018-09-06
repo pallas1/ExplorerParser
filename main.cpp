@@ -35,8 +35,6 @@
 
 #define HEADER_SIZE 122
 
-std::stringstream block_hashes;
-std::stringstream orphan_hashes;
 std::string last_block_hash;
 
 uint64_t blk_count(0);
@@ -57,8 +55,11 @@ std::vector<spp::sparse_hash_map<std::string, AddrStats>> addr_undo_data;
 
 FILE* bhdb_handle = nullptr;
 FILE* ohdb_handle = nullptr;
+FILE* bidb_handle = nullptr;
+FILE* oidb_handle = nullptr;
 
 uint64_t max_out = uint64_t(1800000000) * uint64_t(10000000000);
+bool fork_detected = false;
 
 inline void error_exit(const char* error_txt, uint64_t fail_height)
 {
@@ -88,6 +89,32 @@ inline void put_orph_hash(uint64_t index, const std::string& hash)
 {
     fseek(ohdb_handle, 64*index, SEEK_SET);
     fwrite(hash.c_str(), 1, 64, ohdb_handle);
+}
+
+inline void get_block_link(uint64_t index, uint32_t& file_number, uint64_t& file_index)
+{
+    fseek(bidb_handle, 12*index, SEEK_SET);
+    fread(&file_number, 4, 1, bidb_handle);
+    fread(&file_index, 8, 1, bidb_handle);
+}
+
+inline void put_block_link(uint64_t index, uint32_t file_number, uint64_t file_index)
+{
+    fseek(bidb_handle, 12*index, SEEK_SET);
+    fwrite(&file_number, 4, 1, bidb_handle);
+    fwrite(&file_index, 8, 1, bidb_handle);
+}
+
+inline void get_orph_link(uint64_t index, char* data)
+{
+    fseek(oidb_handle, 40*index, SEEK_SET);
+    fread(data, 1, 40, oidb_handle);
+}
+
+inline void put_orph_link(uint64_t index, const char* data)
+{
+    fseek(oidb_handle, 40*index, SEEK_SET);
+    fwrite(data, 1, 40, oidb_handle);
 }
 
 inline void mpz_set_uint512(mpz_t r, uint512& u)
@@ -402,6 +429,7 @@ std::string read_block_files(std::string block_folder)
             {
                 bool magic_found = false;
                 uint32_t magic_bbuff = 0;
+                int32_t empty_space = 0;
 
                 //scan file for magic bytes
                 while (fread(&magic_bbuff, 1, 4, pFile) == 4)
@@ -414,6 +442,9 @@ std::string read_block_files(std::string block_folder)
                     } else {
                         fseek(pFile, -3, SEEK_CUR);
                         bfile_index++;
+                        if (empty_space++ > 1025) {
+                            break;
+                        }
                     }
                 }
 
@@ -423,6 +454,8 @@ std::string read_block_files(std::string block_folder)
                 //get block size and read data into buffer
                 fread(&block_size, 1, 4, pFile);
                 BlockData* block_data = new BlockData();
+                block_data->fileNumber = blast_num;
+                block_data->fileIndex = bfile_index - 4;
                 block_data->bytes = new char[block_size];
                 char* block_buff = block_data->bytes;
                 fread(block_buff, 1, block_size, pFile);
@@ -509,96 +542,146 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
 
             if (prev_hash != last_hash) {
 
-                std::cout << "Fork detected, locating common sync point ..." << std::endl;
+                fork_detected = true;
+
+                if (chain_links.size() > 2) {
+                    std::cout << "Fork detected, locating origin ..." << std::endl;
+                } else {
+                    std::cout << "Fork detected, ignoring for now ..." << std::endl;
+                    exit(EXIT_SUCCESS);
+                }
 
                 std::string bhdb_file(db_dir + "bhashes");
                 std::string ohdb_file(db_dir + "ohashes");
+                std::string oidb_file(db_dir + "ohlinks");
+
                 bhdb_handle = fopen(bhdb_file.c_str(), "r+");
                 ohdb_handle = fopen(ohdb_file.c_str(), "r+");
+                oidb_handle = fopen(oidb_file.c_str(), "r+");
 
-                uint64_t lastTipHeight = last_block->header.nHeight;
-                uint64_t lHeightIndex = lastTipHeight - 1;
-                std::string hash_str;
+                std::string orig_hash(prev_hash);
+                uint64_t lHeightIndex = 0;
                 char tmp_bytes[64];
-                bool done = true;
+                bool undo_error = false;
+                bool done = false;
 
-                for (;lHeightIndex > 0; --lHeightIndex)
+                while (true)
                 {
-                    get_block_hash(lHeightIndex, &tmp_bytes[0]);
-                    hash_str = HexDecode(tmp_bytes, 64);
+                    //TODO: remove revived orphans from ohashes and ohlinks, oblk_count--
+                    done = false;
 
-                    if (hash_str.size() != 32) {
-                        std::cout << "Error: found block hash with wrong size: " << hash_str << std::endl;
-                        exit(EXIT_FAILURE);
+                    for (uint64_t i=oblk_count; i > 0; --i)
+                    {
+                        get_orph_hash(i-1, tmp_bytes);
+
+                        if (HexDecode(tmp_bytes, 64) == prev_hash) {
+                            get_orph_link(i-1, tmp_bytes);
+                            prev_hash.assign(tmp_bytes, 32);
+                            memcpy(&lHeightIndex, &(tmp_bytes[32]), 8);
+                            done = true;
+                            break;
+                        }
                     }
 
-                    if (hash_str == prev_hash) {
+                    if (!done) break;
 
-                        std::cout << "Fork origin located, undoing blocks ..." << std::endl;
+                    get_block_hash(--lHeightIndex, tmp_bytes);
 
-                        for (;lHeightIndex < lastTipHeight; ++lHeightIndex)
+                    if (HexDecode(tmp_bytes, 64) == prev_hash) {
+                        last_block_hash = prev_hash;
+                        std::string bidb_file(db_dir + "bilinks");
+                        bidb_handle = fopen(bidb_file.c_str(), "r+");
+                        get_block_link(lHeightIndex, bfile_num, bfile_index);
+                        fclose(bidb_handle);
+                        break;
+                    }
+                }
+
+                if (!done) {
+
+                    for (uint64_t i=blk_count; i > 0; --i)
+                    {
+                        get_block_hash(i-1, tmp_bytes);
+
+                        if (HexDecode(tmp_bytes, 64) == orig_hash) {
+                            last_block_hash = orig_hash;
+                            std::string bidb_file(db_dir + "bilinks");
+                            bidb_handle = fopen(bidb_file.c_str(), "r+");
+                            get_block_link(i-1, bfile_num, bfile_index);
+                            fclose(bidb_handle);
+                            done = true;
+                            break;
+                        }
+                    }
+
+                    if (!done) {
+                        std::cout << "Error: unable to locate fork origin!" << std::endl;
+                        exit(EXIT_FAILURE);
+                    }
+                }
+
+                std::cout << "Fork origin at height " << lHeightIndex << ", undoing blocks ..." << std::endl;
+
+                for (uint64_t i=lHeightIndex+1; i < blk_count; ++i)
+                {
+                    std::string undo_str(ReadFileStr(db_dir+"undo/b"+IntToStr(i)));
+                    TrimStrEnd(undo_str, "/");
+
+                    if (undo_str.empty()) {
+                        std::cout << "Couldn't read undo file for block " << i << std::endl;
+                        undo_error = true;
+                        break;
+                    } else {
+                        std::vector<std::string> undo_chunks(Tokenize(undo_str, '|'));
+                        std::vector<std::string> undo_dat(Tokenize(undo_chunks[0], ':'));
+                        std::vector<std::string> uadr_chunks(Tokenize(undo_chunks[1], '/'));
+
+                        txn_count -= stoull(undo_dat[0]);
+                        inp_count -= stoull(undo_dat[1]);
+                        out_count -= stoull(undo_dat[2]);
+                        inp_total -= Integer(undo_dat[3].c_str());
+                        out_total -= Integer(undo_dat[4].c_str());
+
+                        for (const std::string& chunk : uadr_chunks)
                         {
-                            std::string undo_str(ReadFileStr(db_dir+"undo/b"+IntToStr(lHeightIndex)));
-                            TrimStrEnd(undo_str, "/");
+                            if (!chunk.empty()) {
 
-                            if (undo_str.empty()) {
-                                std::cout << "Couldn't read undo file for block " << lHeightIndex << std::endl;
-                                done = false;
-                                break;
-                            } else {
-                                std::vector<std::string> undo_chunks(Tokenize(undo_str, '|'));
-                                std::vector<std::string> undo_dat(Tokenize(undo_chunks[0], ':'));
-                                std::vector<std::string> uadr_chunks(Tokenize(undo_chunks[1], '/'));
+                                std::vector<std::string> uadr_dat(Tokenize(chunk, ':'));
 
-                                txn_count -= stoul(undo_dat[0]);
-                                inp_count -= stoul(undo_dat[1]);
-                                out_count -= stoul(undo_dat[2]);
-                                inp_total -= Integer(undo_dat[3].c_str());
-                                out_total -= Integer(undo_dat[4].c_str());
+                                std::string sub_str(&(uadr_dat[0][1]), 2);
+                                std::string sub_dir(db_dir + "txs/" + sub_str);
+                                std::string adb_file(sub_dir + "/" + uadr_dat[0]);
+                                std::string ast_file(adb_file + "-stats");
 
-                                for (const std::string& chunk : uadr_chunks)
-                                {
-                                    if (!chunk.empty()) {
+                                std::string ast_str(ReadFileStr(ast_file));
+                                std::ofstream ast_ofs(ast_file, std::ofstream::trunc);
 
-                                        std::vector<std::string> uadr_dat(Tokenize(chunk, ':'));
+                                if (ast_ofs.is_open() && !ast_str.empty()) {
 
-                                        std::string sub_str(&(uadr_dat[0][1]), 2);
-                                        std::string sub_dir(db_dir + "txs/" + sub_str);
-                                        std::string adb_file(sub_dir + "/" + uadr_dat[0]);
-                                        std::string ast_file(adb_file + "-stats");
+                                        std::vector<std::string> astats(Tokenize(ast_str, ':'));
+                                        uint64_t isum = stoull(astats[0]) - stoull(uadr_dat[1]);
+                                        uint64_t osum = stoull(astats[1]) - stoull(uadr_dat[2]);
+                                        uint64_t icnt = stoull(astats[2]) - stoull(uadr_dat[3]);
+                                        uint64_t ocnt = stoull(astats[3]) - stoull(uadr_dat[4]);
 
-                                        std::string ast_str(ReadFileStr(ast_file));
-                                        std::ofstream ast_ofs(ast_file, std::ofstream::trunc);
+                                        ast_ofs << isum << ":" << osum << ":" << icnt << ":" << ocnt;
+                                        ast_ofs.close();
 
-                                        if (ast_ofs.is_open() && !ast_str.empty()) {
-
-                                                std::vector<std::string> astats(Tokenize(ast_str, ':'));
-                                                uint64_t isum = stoull(astats[0]) - stoull(uadr_dat[1]);
-                                                uint64_t osum = stoull(astats[1]) - stoull(uadr_dat[2]);
-                                                uint64_t icnt = stoull(astats[2]) - stoull(uadr_dat[3]);
-                                                uint64_t ocnt = stoull(astats[3]) - stoull(uadr_dat[4]);
-
-                                                ast_ofs << isum << ":" << osum << ":" << icnt << ":" << ocnt;
-                                                ast_ofs.close();
-
-                                        } else {
-                                            std::cout << "Missing address stat file: " << ast_file << std::endl;
-                                            done = false;
-                                            break;
-                                        }
-                                    }
+                                } else {
+                                    std::cout << "Missing address stat file: " << ast_file << std::endl;
+                                    undo_error = true;
+                                    break;
                                 }
                             }
                         }
-
-                        break;
                     }
                 }
 
                 fclose(bhdb_handle);
                 fclose(ohdb_handle);
+                fclose(oidb_handle);
 
-                if (!done) {
+                if (undo_error) {
                     std::cout << "ERROR: unable to process fork!" << std::endl;
                     exit(EXIT_FAILURE);
                 }
@@ -748,13 +831,13 @@ void save_undo_data(const std::vector<BlockData*>& blocks, const std::string db_
         BlockData* bdat(blocks[i]);
 
         std::stringstream undo_ss;
-        undo_ss << bdat->txnCount << ":" << bdat->inpTotal << ":" << bdat->outTotal
-                << ":" << bdat->inpCount << ":" << bdat->outCount << "|";
+        undo_ss << bdat->txnCount << ":" << bdat->inpCount << ":" << bdat->outCount
+            << ":" << bdat->inpTotal << ":" << bdat->outTotal << "|";
 
         for (const auto& data : addr_undo_data[i])
         {
-            undo_ss << hash160tobase58(data.first) << ":" << data.second.inpCnt << ":" <<
-                data.second.outCnt << ":" << data.second.inpSum << ":" << data.second.outSum << "/";
+            undo_ss << hash160tobase58(data.first) << ":" << data.second.inpSum << ":" <<
+                data.second.outSum << ":" << data.second.inpCnt << ":" << data.second.outCnt << "/";
         }
 
         std::string undo_file(db_dir+"undo/b"+IntToStr(bdat->header.nHeight));
@@ -775,20 +858,32 @@ void update_hash_lists(const std::string db_dir)
 
     std::string bhdb_file(db_dir + "bhashes");
     std::string ohdb_file(db_dir + "ohashes");
+    std::string bidb_file(db_dir + "bilinks");
+    std::string oidb_file(db_dir + "ohlinks");
     bhdb_handle = fopen(bhdb_file.c_str(), "r+");
     ohdb_handle = fopen(ohdb_file.c_str(), "r+");
+    bidb_handle = fopen(bidb_file.c_str(), "r+");
+    oidb_handle = fopen(oidb_file.c_str(), "r+");
+    char temp_odat[40];
 
     for (const auto& item: block_hash_map)
     {
         if (item.second->isOrphan) {
-            put_orph_hash(oblk_count++, HexEncode(item.first));
+            memcpy(temp_odat, item.second->header.hashPrevBlock.data, 32);
+            memcpy(&(temp_odat[32]), &(item.second->header.nHeight), 8);
+            put_orph_hash(oblk_count, HexEncode(item.first));
+            put_orph_link(oblk_count++, temp_odat);
         } else {
-            put_block_hash(item.second->header.nHeight, HexEncode(item.first));
+            uint64_t& blk_index(item.second->header.nHeight);
+            put_block_hash(blk_index, HexEncode(item.first));
+            put_block_link(blk_index, item.second->fileNumber, item.second->fileIndex);
         }
     }
 
     fclose(bhdb_handle);
     fclose(ohdb_handle);
+    fclose(bidb_handle);
+    fclose(oidb_handle);
 }
 
 void update_db_files(const std::string& db_dir)
@@ -935,6 +1030,8 @@ void create_db_dirs(const std::string db_dir)
     std::string undoDir = db_dir + "undo/";
     std::string bhFile = db_dir + "bhashes";
     std::string ohFile = db_dir + "ohashes";
+    std::string blFile = db_dir + "bilinks";
+    std::string olFile = db_dir + "ohlinks";
 
     if (!DirExists(db_dir)) {
         if (!CreateDir(db_dir)) {
@@ -963,6 +1060,18 @@ void create_db_dirs(const std::string db_dir)
     if (!FileExists(ohFile)) {
         if (!CreateFile(ohFile)) {
             throw std::runtime_error("Unable to create file: "+ohFile);
+        }
+    }
+
+    if (!FileExists(blFile)) {
+        if (!CreateFile(blFile)) {
+            throw std::runtime_error("Unable to create file: "+blFile);
+        }
+    }
+
+    if (!FileExists(olFile)) {
+        if (!CreateFile(olFile)) {
+            throw std::runtime_error("Unable to create file: "+olFile);
         }
     }
 }
@@ -1025,26 +1134,25 @@ int main(int argc, char *argv[])
         bfile_index = stoull(block_dat[1]);
         std::string lbh(HexDecode(block_dat[2]));
 
-        std::string bhdb_file(db_folder + "bhashes");
-        std::string ohdb_file(db_folder + "ohashes");
-        bhdb_handle = fopen(bhdb_file.c_str(), "r+");
-        ohdb_handle = fopen(ohdb_file.c_str(), "r+");
-
-        char tmp_bytes[64];
-        get_block_hash(stoull(last_dat[0])-1, &tmp_bytes[0]);
-        std::string last_bhash(tmp_bytes, 64);
-        get_orph_hash(stoull(last_dat[2])-1, &tmp_bytes[0]);
-        std::string last_ohash(tmp_bytes, 64);
-
-        fclose(bhdb_handle);
-        fclose(ohdb_handle);
-
         last_block_hash = read_block_files(block_folder);
 
         if (last_block_hash.empty()) {
             std::cout << "No new blocks found." << std::endl;
         } else {
+
             std::vector<BlockData*> block_chain(build_block_links(lbh, db_folder));
+
+            if (fork_detected) {
+                fork_detected = false;
+                lbh = last_block_hash;
+                block_hash_map.clear();
+                last_block_hash = read_block_files(block_folder);
+                block_chain = build_block_links(lbh, db_folder);
+                if (fork_detected) {
+                    throw std::runtime_error("Failed to recover from fork!");
+                }
+            }
+
             parse_blocks(block_chain);
             save_undo_data(block_chain, db_folder);
             update_hash_lists(db_folder);
