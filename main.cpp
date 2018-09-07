@@ -585,7 +585,7 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
 
                     if (!done) break;
 
-                    get_block_hash(--lHeightIndex, tmp_bytes);
+                    get_block_hash(lHeightIndex-1, tmp_bytes);
 
                     if (HexDecode(tmp_bytes, 64) == prev_hash) {
                         last_block_hash = prev_hash;
@@ -599,15 +599,15 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
 
                 if (!done) {
 
-                    for (uint64_t i=blk_count; i > 0; --i)
+                    for (lHeightIndex=blk_count; lHeightIndex > 0; --lHeightIndex)
                     {
-                        get_block_hash(i-1, tmp_bytes);
+                        get_block_hash(lHeightIndex-1, tmp_bytes);
 
                         if (HexDecode(tmp_bytes, 64) == orig_hash) {
                             last_block_hash = orig_hash;
                             std::string bidb_file(db_dir + "bilinks");
                             bidb_handle = fopen(bidb_file.c_str(), "r+");
-                            get_block_link(i-1, bfile_num, bfile_index);
+                            get_block_link(lHeightIndex, bfile_num, bfile_index);
                             fclose(bidb_handle);
                             done = true;
                             break;
@@ -622,7 +622,7 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
 
                 std::cout << "Fork origin at height " << lHeightIndex << ", undoing blocks ..." << std::endl;
 
-                for (uint64_t i=lHeightIndex+1; i < blk_count; ++i)
+                for (uint64_t i=lHeightIndex; i < blk_count; ++i)
                 {
                     std::string undo_str(ReadFileStr(db_dir+"undo/b"+IntToStr(i)));
                     TrimStrEnd(undo_str, "/");
