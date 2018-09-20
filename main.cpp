@@ -599,15 +599,16 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
 
                 if (!done) {
 
-                    for (lHeightIndex=blk_count; lHeightIndex > 0; --lHeightIndex)
+                    for (lHeightIndex=blk_count; lHeightIndex > 1; --lHeightIndex)
                     {
                         get_block_hash(lHeightIndex-1, tmp_bytes);
 
                         if (HexDecode(tmp_bytes, 64) == orig_hash) {
-                            last_block_hash = orig_hash;
+                            get_block_hash(lHeightIndex-2, tmp_bytes);
+                            last_block_hash = HexDecode(tmp_bytes, 64);
                             std::string bidb_file(db_dir + "bilinks");
                             bidb_handle = fopen(bidb_file.c_str(), "r+");
-                            get_block_link(lHeightIndex, bfile_num, bfile_index);
+                            get_block_link(--lHeightIndex, bfile_num, bfile_index);
                             fclose(bidb_handle);
                             done = true;
                             break;
