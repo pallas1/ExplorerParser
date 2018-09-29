@@ -650,6 +650,7 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
                                 std::vector<std::string> uadr_dat(Tokenize(chunk, ':'));
 
                                 std::string sub_str(&(uadr_dat[0][1]), 2);
+                                std::transform(sub_str.begin(), sub_str.end(), sub_str.begin(), ::tolower);
                                 std::string sub_dir(db_dir + "txs/" + sub_str);
                                 std::string adb_file(sub_dir + "/" + uadr_dat[0]);
                                 std::string ast_file(adb_file + "-stats");
@@ -895,6 +896,7 @@ void update_db_files(const std::string& db_dir)
     {
         std::string address(hash160tobase58(item.first));
         std::string sub_str(&(address[1]), 2);
+        std::transform(sub_str.begin(), sub_str.end(), sub_str.begin(), ::tolower);
         std::string sub_dir(db_dir + "txs/" + sub_str);
         std::string adb_file(sub_dir + "/" + address);
         std::string ast_file(adb_file + "-stats");
@@ -968,6 +970,7 @@ void save_db_files(const std::string& db_dir)
     {
         std::string address(hash160tobase58(item.first));
         std::string sub_str(&(address[1]), 2);
+        std::transform(sub_str.begin(), sub_str.end(), sub_str.begin(), ::tolower);
         std::string sub_dir(db_dir + "txs/" + sub_str);
         std::string adb_file(sub_dir + "/" + address);
         std::string ast_file(adb_file + "-stats");
