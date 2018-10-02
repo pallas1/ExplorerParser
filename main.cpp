@@ -410,7 +410,6 @@ std::string read_block_files(std::string block_folder)
         if (blast_num != bfile_num) {
             blast_num = bfile_num;
             bfile_index = 0;
-            block_index = 0;
         }
 
         std::stringstream ss;
