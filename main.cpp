@@ -398,11 +398,11 @@ inline uint256 hash_header(const void* hdr_bytes, size_t hdr_size)
 
 std::string read_block_files(std::string block_folder)
 {
-    uint32_t blast_num = bfile_num;
     uint32_t magic_bytes = 0xd9b4bef9;
+    uint32_t blast_num = bfile_num;
+    uint64_t block_index = bfile_index;
     uint32_t block_size = 0;
     uint64_t block_count = 0;
-    uint64_t block_index = 0;
     std::string block_hash;
 
     while (true)
@@ -410,6 +410,7 @@ std::string read_block_files(std::string block_folder)
         if (blast_num != bfile_num) {
             blast_num = bfile_num;
             bfile_index = 0;
+            block_index = 0;
         }
 
         std::stringstream ss;
@@ -459,8 +460,6 @@ std::string read_block_files(std::string block_folder)
                 block_data->bytes = new char[block_size];
                 char* block_buff = block_data->bytes;
                 fread(block_buff, 1, block_size, pFile);
-                bfile_index += 4 + block_size;
-                block_index = bfile_index;
 
                 BBUInt16 verNumber(&(block_buff[0]));
                 BBUInt64 timeStamp(&(block_buff[98]));
@@ -476,9 +475,17 @@ std::string read_block_files(std::string block_folder)
                 block_hdr.nNonce = randNonce.value;
                 block_hdr.nVersion = verNumber.value;
 
+                if (block_hdr.nVersion == 0) {
+                    std::cout << "Incomplete block read detected, stopping ..." << std::endl;
+                    exit(EXIT_SUCCESS);
+                }
+
                 uint256 hash_bytes(hash_header(block_hdr.hashPrevBlock.data, HEADER_SIZE));
                 block_hash.assign(hash_bytes.data, 32);
                 block_hash_map[block_hash] = block_data;
+
+                bfile_index += 4 + block_size;
+                block_index = bfile_index;
             }
 
         } else {
@@ -544,7 +551,7 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
 
                 fork_detected = true;
 
-                if (chain_links.size() > 2) {
+                if (chain_links.size() > 9) {
                     std::cout << "Fork detected, locating origin ..." << std::endl;
                 } else {
                     std::cout << "Fork detected, ignoring for now ..." << std::endl;
@@ -588,6 +595,7 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
                     get_block_hash(lHeightIndex-1, tmp_bytes);
 
                     if (HexDecode(tmp_bytes, 64) == prev_hash) {
+                        std::cout << "Found origin via orphan chain ..." << std::endl;
                         last_block_hash = prev_hash;
                         std::string bidb_file(db_dir + "bilinks");
                         bidb_handle = fopen(bidb_file.c_str(), "r+");
@@ -604,6 +612,7 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
                         get_block_hash(lHeightIndex-1, tmp_bytes);
 
                         if (HexDecode(tmp_bytes, 64) == orig_hash) {
+                            std::cout << "Found origin via main chain ..." << std::endl;
                             get_block_hash(lHeightIndex-2, tmp_bytes);
                             last_block_hash = HexDecode(tmp_bytes, 64);
                             std::string bidb_file(db_dir + "bilinks");
