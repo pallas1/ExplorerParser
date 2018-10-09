@@ -598,6 +598,10 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
                         get_orph_link(i-1, tmp_bytes);
                         prev_hash.assign(tmp_bytes, 32);
                         memcpy(&lHeightIndex, &(tmp_bytes[32]), 8);
+                        if (lHeightIndex < 10) {
+                            std::cout << "Error: invalid orphan link height!" << std::endl;
+                            exit(EXIT_FAILURE);
+                        }
                         done = true;
                         break;
                     }
@@ -612,7 +616,7 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
                     last_block_hash = prev_hash;
                     std::string bidb_file(db_dir + "bilinks");
                     bidb_handle = fopen(bidb_file.c_str(), "r+");
-                    get_block_link(lHeightIndex, bfile_num, bfile_index);
+                    get_block_link(lHeightIndex-9, bfile_num, bfile_index);
                     fclose(bidb_handle);
                     break;
                 }
@@ -620,17 +624,17 @@ std::vector<BlockData*> build_block_links(const std::string last_hash, std::stri
 
             if (!done) {
 
-                for (lHeightIndex=blk_count; undo_count++ < 10000 && lHeightIndex > 1; --lHeightIndex)
+                for (lHeightIndex=blk_count; undo_count++ < 10000 && lHeightIndex > 9;)
                 {
-                    get_block_hash(lHeightIndex-1, tmp_bytes);
+                    get_block_hash(--lHeightIndex, tmp_bytes);
 
                     if (HexDecode(tmp_bytes, 64) == orig_hash) {
                         std::cout << "Found origin via main chain ..." << std::endl;
-                        get_block_hash(lHeightIndex-2, tmp_bytes);
+                        get_block_hash(lHeightIndex-1, tmp_bytes);
                         last_block_hash = HexDecode(tmp_bytes, 64);
                         std::string bidb_file(db_dir + "bilinks");
                         bidb_handle = fopen(bidb_file.c_str(), "r+");
-                        get_block_link(--lHeightIndex, bfile_num, bfile_index);
+                        get_block_link(lHeightIndex-9, bfile_num, bfile_index);
                         fclose(bidb_handle);
                         done = true;
                         break;
