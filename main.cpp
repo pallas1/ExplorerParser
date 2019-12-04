@@ -35,6 +35,7 @@
 
 #define HEADER_SIZE 122
 #define MAX_BLOCK_SIZE 10485760
+//#define THROTTLE		// define in order to slow it down deliberately
 
 std::string last_block_hash;
 
@@ -530,6 +531,9 @@ std::vector<BlockData*> build_chain_links()
         chain_links.push_back(last_block);
         if (prev_hash == zero_str32) break;
         last_block = block_hash_map[prev_hash];
+        #ifdef THROTTLE
+					usleep(10);
+				#endif
     }
 
     std::cout << "Blocks linked: " << block_count << std::endl;
@@ -741,6 +745,9 @@ void parse_blockchain(std::vector<BlockData*>& blocks)
 
         parse_txns(&(block_data.bytes[HEADER_SIZE]), block.vtx);
         txn_count += block.vtx.size();
+        #ifdef THROTTLE
+					usleep(10);
+				#endif
     }
 }
 
@@ -816,7 +823,9 @@ void build_rich_list(std::vector<std::pair<uint64_t, std::string>>& rich_list)
             }
         }
 
-        rich_list.emplace_back(addr_data.stats.outSum-addr_data.stats.inpSum, item.first);
+				if (addr_data.stats.outSum - addr_data.stats.inpSum > 30000ULL * 10000000000ULL) {
+					rich_list.emplace_back(addr_data.stats.outSum-addr_data.stats.inpSum, item.first);
+				}
     }
 
     std::sort(rich_list.begin(), rich_list.end(),
@@ -905,6 +914,9 @@ void update_hash_lists(const std::string db_dir)
             put_block_hash(blk_index, HexEncode(item.first));
             put_block_link(blk_index, item.second->fileNumber, item.second->fileIndex);
         }
+        #ifdef THROTTLE
+					usleep(10);
+				#endif
     }
 
     fclose(bhdb_handle);
@@ -1023,6 +1035,9 @@ void save_db_files(const std::string& db_dir)
         } else {
             throw std::runtime_error("Unable to create db file: "+ast_file);
         }
+        #ifdef THROTTLE
+					usleep(10);
+				#endif
     }
 
     std::stringstream ss;
@@ -1195,7 +1210,11 @@ int main(int argc, char *argv[])
         parse_blockchain(block_chain);
 
         std::vector<std::pair<uint64_t, std::string>> rich_list;
-        rich_list.reserve(block_chain.size());
+        size_t bc_size = block_chain.size();
+        for (const auto& item : block_chain) delete item;
+        std::vector<BlockData*>().swap(block_chain);
+
+        rich_list.reserve(bc_size);
         build_rich_list(rich_list);
         save_rich_list(db_folder, rich_list);
 
@@ -1203,6 +1222,6 @@ int main(int argc, char *argv[])
         throw std::runtime_error("Invalid operation mode specified!");
     }
 
-    std::cout << "Finished!";
+    std::cout << "Finished!" << std::endl;
     return EXIT_SUCCESS;
 }
