@@ -16,7 +16,7 @@
     #include <direct.h>
     #define access   _access_s
     #define stat64   _stat64
-    #define mkdir    _mkdir
+    #define mkdir(A, B) _mkdir(A)
 #else
     #include <unistd.h>
 #endif
@@ -34,7 +34,7 @@ inline bool DirExists(const std::string dirname)
 
 inline bool CreateDir(const std::string dirname)
 {
-    return (mkdir(dirname.c_str()) == 0) ? true : false;
+    return (mkdir(dirname.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0) ? true : false;
 }
 
 inline bool FileExists(const std::string& filename)
@@ -704,6 +704,8 @@ class BlockData
 public:
     bool isOrphan;
     char* bytes;
+    uint32_t fileNumber;
+    uint64_t fileIndex;
     uint32_t txnCount;
     uint32_t inpCount;
     uint32_t outCount;
@@ -714,6 +716,8 @@ public:
     BlockData() :
         isOrphan(true),
         bytes(nullptr),
+        fileNumber(0),
+        fileIndex(0),
         txnCount(0),
         inpCount(0),
         outCount(0),
